@@ -2,71 +2,43 @@ import streamlit as st
 import cv2
 import numpy as np
 from PIL import Image
-import mediapipe as mp
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, WebRtcMode
+from utils.face_detection import detect_faces, draw_faces
+from utils.landmark_detection import detect_landmarks, draw_landmarks
 
-st.set_page_config(page_title="Face Detection + Landmarks", layout="wide")
-st.title("Face Detection & Landmarks Identification")
-st.write("Upload an image or use your webcam to detect faces and optional landmarks.")
+st.set_page_config(page_title="Face Analysis", layout="wide")
+st.title("Face Detection and Landmark Identification")
+st.markdown("Upload an image and choose between **Face Detection** or **Landmark Detection**")
 
-option = st.selectbox("Select Option", ["Face Detection", "Face + Landmarks"])
+# Sidebar
+task = st.sidebar.selectbox(
+    "Select Task",
+    ["Face Detection", "Landmark Detection"]
+)
 
-# Mediapipe modules
-mp_face_detection = mp.solutions.face_detection
-mp_face_mesh = mp.solutions.face_mesh
-mp_drawing = mp.solutions.drawing_utils
+uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
-# ================= Helper Function =================
-def process_image(img_pil, detect_landmarks=False):
-    img = np.array(img_pil.convert("RGB"))
-    img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+if uploaded_file is not None:
+    # Convert to OpenCV image
+    file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
+    image = cv2.imdecode(file_bytes, 1)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # Convert to RGB for consistency
+    original_image = image.copy()
 
-    # Face detection
-    with mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5) as face_detection:
-        results = face_detection.process(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
-    
-    if results.detections:
-        for det in results.detections:
-            mp_drawing.draw_detection(img_bgr, det)
+    if task == "Face Detection":
+        with st.spinner("Detecting faces..."):
+            faces = detect_faces(image)
+            result_img = draw_faces(image.copy(), faces)
+        st.success(f"✅ Detected {len(faces)} face(s)")
+        
+    else:  # Landmark Detection
+        with st.spinner("Detecting facial landmarks..."):
+            landmarks = detect_landmarks(image)
+            result_img = draw_landmarks(image.copy(), landmarks)
+        st.success(f"✅ Detected landmarks on {len(landmarks)} face(s)")
 
-    # Facial landmarks
-    if detect_landmarks:
-        with mp_face_mesh.FaceMesh(static_image_mode=True) as face_mesh:
-            results = face_mesh.process(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
-            if results.multi_face_landmarks:
-                for face_landmarks in results.multi_face_landmarks:
-                    mp_drawing.draw_landmarks(
-                        image=img_bgr,
-                        landmark_list=face_landmarks,
-                        connections=mp_face_mesh.FACEMESH_TESSELATION,
-                        landmark_drawing_spec=None,
-                        connection_drawing_spec=mp_drawing.DrawingSpec(color=(0,255,0), thickness=1, circle_radius=1)
-                    )
-    return Image.fromarray(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
-
-# ================= Tabs =================
-tab1, tab2 = st.tabs(["Upload Image", "Use Webcam"])
-
-# --- Image Upload ---
-with tab1:
-    uploaded_file = st.file_uploader("Choose an image", type=["jpg","jpeg","png"])
-    if uploaded_file is not None:
-        img = Image.open(uploaded_file)
-        annotated_img = process_image(img, detect_landmarks=(option=="Face + Landmarks"))
-        st.image(annotated_img, caption="Detected Faces / Landmarks", use_column_width=True)
-
-# --- Webcam ---
-with tab2:
-    class FaceVideoTransformer(VideoTransformerBase):
-        def transform(self, frame):
-            img = frame.to_ndarray(format="bgr24")
-            img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-            annotated = process_image(img_pil, detect_landmarks=(option=="Face + Landmarks"))
-            return cv2.cvtColor(np.array(annotated), cv2.COLOR_RGB2BGR)
-
-    webrtc_streamer(
-        key="face-webcam",
-        mode=WebRtcMode.SENDRECV,
-        video_transformer_factory=FaceVideoTransformer,
-        media_stream_constraints={"video": True, "audio": False},
-    )
+    # Display results
+    col1, col2 = st.columns(2)
+    with col1:
+        st.image(original_image, caption="Original Image", use_column_width=True)
+    with col2:
+        st.image(result_img, caption="Processed Image", use_column_width=True)
