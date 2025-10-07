@@ -1,10 +1,10 @@
-# Face Detection & Landmarks App (Streamlit + Mediapipe)
+# Face Detection + Landmarks App
 
 ## Features
 - Detect faces in images or webcam
-- Optional facial landmarks visualization
+- Optional facial landmarks
 - Bounding boxes for faces
-- Real-time webcam support
+- Real-time webcam support (browser)
 
 ## Run Locally
 ```bash
